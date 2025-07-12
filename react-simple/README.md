@@ -2,6 +2,8 @@
 
 # React Simple - SNS App 実装ガイド
 
+このハンズオンを始める前に、 [`react-simple`](.) フォルダをVSCodeで開いてください。
+
 ## プロジェクト概要
 
 このプロジェクトは、React を使用したソーシャルネットワーク（掲示板）アプリケーションの実装ガイドです。
@@ -36,6 +38,10 @@
 
 **目標**: 基本的なVite+React環境を準備し、必要な依存関係をインストール
 
+#### 1.0 ターミナルを立ち上げる
+
+[ターミナルの立ち上げ方](../README.md#-vscode-でのターミナル操作)を参考に、VSCodeでターミナルを立ち上げてください。
+
 #### 1.1 プロジェクトの初期化確認
 
 ```bash
@@ -52,8 +58,10 @@ npm run dev
 
 #### 1.3 基本構造の確認
 
-- `src/main.jsx` - React アプリケーションのエントリーポイント
-- `src/App.jsx` - メインアプリケーションコンポーネント
+Reactで重要なファイルを確認します.
+
+- `src/main.jsx` - React アプリケーションの読み込みポイント（Cのmain関数のようなもの）
+- `src/App.jsx` - メインアプリケーションコンポーネント（実際のアプリケーションが動いているコンポーネント）
 - `src/utils/` - ユーティリティ関数（日付フォーマット、ローカルストレージ）
 
 ### Step 2: ダミーデータの作成
@@ -68,7 +76,7 @@ mkdir -p src/data
 
 #### 2.2 ダミーデータの実装
 
-`src/data/dummyData.js` を作成：
+`src/data/dummyData.js` を作成し、以下のソースコードを貼り付けて保存して下さい。
 
 ```javascript
 // ダミーデータの管理
@@ -196,9 +204,11 @@ export function getPostById(postId) {
 
 ### Step 3: 基本コンポーネントの実装
 
-**目標**: 投稿表示に必要な基本コンポーネントを作成
+**目標**: SNSの投稿表示に必要な基本コンポーネントを作成していきます.
 
 #### 3.1 componentsディレクトリの作成
+
+フォルダ位置：[react-simple](.)であることを確認
 
 ```bash
 mkdir -p src/components
@@ -206,14 +216,16 @@ mkdir -p src/components
 
 #### 3.2 Postコンポーネントの実装
 
+１つ１つの投稿を表示するコンポーネントを実装します。
+
 `src/components/Post.jsx` を作成：
 
 ```jsx
 import { formatDate } from '../utils/date.js';
-import { isLiked } from '../utils/storage.js';
 
 function Post({ post, currentUser, onLike, onComment, onDelete }) {
-  const liked = isLiked(post.id, currentUser);
+  // サーバーからisLikedが提供されている場合はそれを使用、なければfalse
+  const liked = post.isLiked || false;
 
   return (
     <div className="post">
@@ -248,44 +260,41 @@ export default Post;
 
 #### 3.3 PostListコンポーネントの実装
 
+投稿をリスト形式で表示するコンポーネントを作ります。
+
 `src/components/PostList.jsx` を作成：
 
 ```jsx
-import Post from './Post.jsx';
+import Post from './Post';
 
 function PostList({
   posts,
-  loading,
-  error,
   currentUser,
   onLike,
   onComment,
   onDelete,
+  onPageChange,
 }) {
-  if (loading) {
-    return <div className="loading">読み込み中...</div>;
-  }
-
-  if (error) {
-    return <div className="error">エラー: {error}</div>;
-  }
 
   if (!posts || posts.length === 0) {
-    return <div className="empty">投稿はまだありません。</div>;
+    return <div className="empty">投稿がありません。</div>;
   }
 
   return (
-    <div className="posts-list">
-      {posts.map(post => (
-        <Post
-          key={post.id}
-          post={post}
-          currentUser={currentUser}
-          onLike={onLike}
-          onComment={onComment}
-          onDelete={onDelete}
-        />
-      ))}
+    <div className="posts-container">
+      <h2>タイムライン</h2>
+      <div className="posts-list">
+        {posts.map(post => (
+          <Post
+            key={post.id}
+            post={post}
+            currentUser={currentUser}
+            onLike={onLike}
+            onComment={onComment}
+            onDelete={onDelete}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -334,7 +343,7 @@ function PostForm({ currentUser, onSubmit }) {
   };
 
   return (
-    <div className="post-form">
+    <div className="new-post-container">
       <h2>新しい投稿</h2>
       <form onSubmit={handleSubmit}>
         <textarea
@@ -342,15 +351,9 @@ function PostForm({ currentUser, onSubmit }) {
           onChange={e => setContent(e.target.value)}
           onKeyPress={handleKeyPress}
           placeholder="今何してる？"
-          rows="4"
-          disabled={isSubmitting}
+          rows={4}
         />
-        <div className="form-actions">
-          <span className="user-info">投稿者: {currentUser}</span>
-          <button type="submit" disabled={isSubmitting || !content.trim()}>
-            {isSubmitting ? '投稿中...' : '投稿する'}
-          </button>
-        </div>
+        <button type="submit">投稿する</button>
       </form>
     </div>
   );
@@ -369,25 +372,24 @@ export default PostForm;
 
 ```jsx
 import { useState, useEffect } from 'react';
-import PostForm from './components/PostForm.jsx';
-import PostList from './components/PostList.jsx';
-import { setLiked, removeLiked, isLiked } from './utils/storage.js';
-import {
-  getPaginatedPosts,
-  addPost,
-  deletePost,
-  toggleLike,
-  addComment,
-  getPostById,
-} from './data/dummyData.js';
 import './App.css';
+import PostForm from './components/PostForm';
+import PostList from './components/PostList';
+import {
+  getPosts,
+  createPost,
+  deletePost,
+  addLike,
+  removeLike,
+} from './services/postService';
 
 function App() {
   const [posts, setPosts] = useState([]);
   const [currentUser, setCurrentUser] = useState('ゲスト');
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [commentModalOpen, setCommentModalOpen] = useState(false);
+  const [selectedPostId, setSelectedPostId] = useState(null);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
@@ -396,205 +398,109 @@ function App() {
     hasNext: false,
     hasPrev: false,
   });
-  const [selectedPost, setSelectedPost] = useState(null);
 
-  // 投稿データの読み込み
-  const loadPosts = (page = currentPage) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const data = getPaginatedPosts(page, pagination.limit);
-      setPosts(data.posts);
-      setPagination(data.pagination);
-      setCurrentPage(page);
-    } catch (err) {
-      setError('投稿の読み込みに失敗しました。');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 初期データの読み込み
   useEffect(() => {
     loadPosts(1);
   }, []);
 
-  // 新規投稿の作成
-  const handleCreatePost = async content => {
+  const loadPosts = async (page = pagination.page) => {
     try {
-      addPost(currentUser, content);
-      loadPosts(1); // 最初のページに戻る
+      setIsLoading(true);
+      setError(null);
+      const data = await getPosts(page, pagination.limit, currentUser);
+      setPosts(data.posts);
+      setPagination(data.pagination);
     } catch (err) {
-      throw new Error('投稿の作成に失敗しました。');
+      console.error('投稿の取得に失敗しました:', err);
+      setError('投稿の取得に失敗しました');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // いいねの切り替え
-  const handleLike = postId => {
-    const liked = isLiked(postId, currentUser);
+  const handleCreatePost = async (author, content) => {
+    await createPost(author, content);
+    await loadPosts(1);
+  };
 
-    if (liked) {
-      toggleLike(postId, false);
-      removeLiked(postId, currentUser);
-    } else {
-      toggleLike(postId, true);
-      setLiked(postId, currentUser);
+  const handleDeletePost = async postId => {
+    if (!confirm('この投稿を削除しますか？')) {
+      return;
     }
 
-    loadPosts();
-  };
-
-  // コメントモーダルの表示
-  const handleComment = postId => {
-    const post = getPostById(postId);
-    setSelectedPost(post);
-  };
-
-  // 投稿の削除
-  const handleDelete = postId => {
-    if (window.confirm('この投稿を削除しますか？')) {
-      deletePost(postId);
-      loadPosts();
+    try {
+      await deletePost(postId);
+      await loadPosts();
+    } catch (error) {
+      console.error('投稿の削除に失敗しました:', error);
+      alert('投稿の削除に失敗しました。');
     }
   };
 
-  // ページ変更
+  const handleToggleLike = async postId => {
+    const post = posts.find(p => p.id === postId);
+    const liked = post?.isLiked || false;
+
+    try {
+      if (liked) {
+        await removeLike(postId, currentUser);
+      } else {
+        await addLike(postId, currentUser);
+      }
+
+      await loadPosts();
+    } catch (error) {
+      console.error('いいねの更新に失敗しました:', error);
+    }
+  };
+
+  const handleOpenComments = postId => {
+    setSelectedPostId(postId);
+    setCommentModalOpen(true);
+  };
+
+  const handleCloseComments = () => {
+    setCommentModalOpen(false);
+    setSelectedPostId(null);
+  };
+
+  const handleCommentAdded = async () => {
+    await loadPosts();
+  };
+
   const handlePageChange = page => {
     loadPosts(page);
   };
 
   return (
     <div className="app">
-      <header className="app-header">
+      <header>
         <h1>SNS掲示板</h1>
-        <div className="user-controls">
-          <label>
-            ユーザー名:
-            <input
-              type="text"
-              value={currentUser}
-              onChange={e => setCurrentUser(e.target.value)}
-              placeholder="名前を入力"
-            />
-          </label>
+        <div className="user-info">
+          <label>ユーザー名: </label>
+          <input
+            type="text"
+            value={currentUser}
+            onChange={e => setCurrentUser(e.target.value)}
+            placeholder="名前を入力"
+          />
         </div>
       </header>
 
-      <main className="app-main">
+      <main>
         <PostForm currentUser={currentUser} onSubmit={handleCreatePost} />
 
-        <div className="posts-section">
-          <h2>タイムライン</h2>
-          <PostList
-            posts={posts}
-            loading={loading}
-            error={error}
-            currentUser={currentUser}
-            onLike={handleLike}
-            onComment={handleComment}
-            onDelete={handleDelete}
-          />
-
-          {pagination.totalPages > 1 && (
-            <div className="pagination">
-              <div className="pagination-info">
-                {pagination.totalCount}件中{' '}
-                {(pagination.page - 1) * pagination.limit + 1}-
-                {Math.min(
-                  pagination.page * pagination.limit,
-                  pagination.totalCount
-                )}
-                件を表示
-              </div>
-              <div className="pagination-controls">
-                <button
-                  onClick={() => handlePageChange(pagination.page - 1)}
-                  disabled={!pagination.hasPrev}
-                >
-                  前へ
-                </button>
-                <span className="page-info">
-                  {pagination.page} / {pagination.totalPages}
-                </span>
-                <button
-                  onClick={() => handlePageChange(pagination.page + 1)}
-                  disabled={!pagination.hasNext}
-                >
-                  次へ
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {selectedPost && (
-          <div className="comment-modal" onClick={() => setSelectedPost(null)}>
-            <div className="modal-content" onClick={e => e.stopPropagation()}>
-              <div className="modal-header">
-                <h3>コメント</h3>
-                <button
-                  className="close-btn"
-                  onClick={() => setSelectedPost(null)}
-                >
-                  ×
-                </button>
-              </div>
-              <div className="modal-body">
-                <div className="original-post">
-                  <strong>{selectedPost.author}</strong>: {selectedPost.content}
-                </div>
-                <div className="comments-list">
-                  {selectedPost.comments.length === 0 ? (
-                    <p>コメントはまだありません。</p>
-                  ) : (
-                    selectedPost.comments.map(comment => (
-                      <div key={comment.id} className="comment">
-                        <div className="comment-header">
-                          <strong>{comment.author}</strong>
-                          <span className="comment-date">
-                            {formatDate(comment.created_at)}
-                          </span>
-                        </div>
-                        <div className="comment-content">{comment.content}</div>
-                      </div>
-                    ))
-                  )}
-                </div>
-                <div className="comment-form">
-                  <textarea
-                    placeholder="コメントを入力"
-                    onKeyPress={e => {
-                      if (e.key === 'Enter' && e.ctrlKey) {
-                        const content = e.target.value.trim();
-                        if (content) {
-                          addComment(selectedPost.id, currentUser, content);
-                          e.target.value = '';
-                          setSelectedPost(getPostById(selectedPost.id)); // 更新
-                          loadPosts(); // 投稿一覧も更新
-                        }
-                      }
-                    }}
-                  />
-                  <button
-                    onClick={e => {
-                      const textarea = e.target.previousElementSibling;
-                      const content = textarea.value.trim();
-                      if (content) {
-                        addComment(selectedPost.id, currentUser, content);
-                        textarea.value = '';
-                        setSelectedPost(getPostById(selectedPost.id)); // 更新
-                        loadPosts(); // 投稿一覧も更新
-                      }
-                    }}
-                  >
-                    コメントする
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <PostList
+          posts={posts}
+          currentUser={currentUser}
+          onLike={handleToggleLike}
+          onComment={handleOpenComments}
+          onDelete={handleDeletePost}
+          isLoading={isLoading}
+          error={error}
+          pagination={pagination}
+          onPageChange={handlePageChange}
+        />
       </main>
     </div>
   );
@@ -612,12 +518,20 @@ export default App;
 `src/components/Pagination.jsx` を作成：
 
 ```jsx
+import './Pagination.css';
+
 function Pagination({ pagination, onPageChange }) {
-  const { page, totalPages, hasNext, hasPrev, totalCount, limit } = pagination;
+  const { page, totalPages, hasNext, hasPrev, totalCount } = pagination;
 
   if (totalPages <= 1) {
     return null;
   }
+
+  const handlePageClick = newPage => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      onPageChange(newPage);
+    }
+  };
 
   const getPageNumbers = () => {
     const pages = [];
@@ -636,39 +550,36 @@ function Pagination({ pagination, onPageChange }) {
     return pages;
   };
 
-  const pageNumbers = getPageNumbers();
-  const startItem = (page - 1) * limit + 1;
-  const endItem = Math.min(page * limit, totalCount);
-
   return (
     <div className="pagination">
       <div className="pagination-info">
-        {totalCount}件中 {startItem}-{endItem}件を表示
+        {totalCount}件中 {(page - 1) * pagination.limit + 1}-
+        {Math.min(page * pagination.limit, totalCount)}件を表示
       </div>
 
       <div className="pagination-controls">
         <button
-          onClick={() => onPageChange(page - 1)}
+          onClick={() => handlePageClick(page - 1)}
           disabled={!hasPrev}
-          className="pagination-btn"
+          className="pagination-button"
         >
           前へ
         </button>
 
-        {pageNumbers.map(pageNum => (
+        {getPageNumbers().map(pageNum => (
           <button
             key={pageNum}
-            onClick={() => onPageChange(pageNum)}
-            className={`pagination-btn ${page === pageNum ? 'active' : ''}`}
+            onClick={() => handlePageClick(pageNum)}
+            className={`pagination-button ${page === pageNum ? 'active' : ''}`}
           >
             {pageNum}
           </button>
         ))}
 
         <button
-          onClick={() => onPageChange(page + 1)}
+          onClick={() => handlePageClick(page + 1)}
           disabled={!hasNext}
-          className="pagination-btn"
+          className="pagination-button"
         >
           次へ
         </button>
@@ -678,17 +589,54 @@ function Pagination({ pagination, onPageChange }) {
 }
 
 export default Pagination;
+
 ```
 
-#### 6.2 App.jsxでのPaginationコンポーネント使用
+#### 6.2 PostList.jsxでのPaginationコンポーネント使用
 
-App.jsxの該当部分を更新：
+PostList.jsxを以下のように変更して下さい。
 
-```jsx
-import Pagination from './components/Pagination.jsx';
+```diff
+import Post from './Post';
++ import Pagination
 
-// JSX内で使用
-<Pagination pagination={pagination} onPageChange={handlePageChange} />;
+function PostList({
+  posts,
+  currentUser,
+  onLike,
+  onComment,
+  onDelete,
+  onPageChange,
++ pagination
+}) {
+
+  if (!posts || posts.length === 0) {
+    return <div className="empty">投稿がありません。</div>;
+  }
+
+  return (
+    <div className="posts-container">
+      <h2>タイムライン</h2>
+      <div className="posts-list">
+        {posts.map(post => (
+          <Post
+            key={post.id}
+            post={post}
+            currentUser={currentUser}
+            onLike={onLike}
+            onComment={onComment}
+            onDelete={onDelete}
+          />
+        ))}
+      </div>
++      {pagination && (
++       <Pagination pagination={pagination} onPageChange={onPageChange} />
++      )}
+    </div>
+  );
+}
+
+export default PostList;
 ```
 
 ### Step 7: コメント機能の実装
